@@ -28,13 +28,57 @@ function handleWebSocket(req, backendHost, url) {
   const backendUrl = `ws://${backendHost}${url.pathname}${url.search}`
   const backend = new WebSocket(backendUrl)
 
-  backend.onmessage = ev => socket.send(ev.data)
-  backend.onclose = ev => safeClose(socket, ev.code, ev.reason)
-  backend.onerror = () => safeClose(socket, 1011, "backend websocket error")
+  const pending = []
+  let backendOpen = false
+  let closed = false
+  const MAX_PENDING = 64
 
-  socket.onmessage = ev => backend.send(ev.data)
-  socket.onclose = ev => safeClose(backend, ev.code, ev.reason)
-  socket.onerror = () => safeClose(backend, 1011, "client websocket error")
+  function closeBoth(code, reason) {
+    if (closed) return
+    closed = true
+    safeClose(socket, code, reason)
+    safeClose(backend, code, reason)
+  }
+
+  function safeSend(ws, data) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(data)
+      return true
+    }
+    return false
+  }
+
+  backend.onopen = () => {
+    backendOpen = true
+    if (socket.readyState !== WebSocket.OPEN) {
+      closeBoth(1001, "client not open")
+      return
+    }
+    for (const msg of pending) {
+      if (!safeSend(backend, msg)) break
+    }
+    pending.length = 0
+  }
+  backend.onmessage = ev => {
+    if (!safeSend(socket, ev.data)) {
+      closeBoth(1001, "client not open")
+    }
+  }
+  backend.onclose = ev => closeBoth(ev.code, ev.reason)
+  backend.onerror = () => closeBoth(1011, "backend websocket error")
+
+  socket.onmessage = ev => {
+    if (backendOpen && safeSend(backend, ev.data)) {
+      return
+    }
+    if (pending.length >= MAX_PENDING) {
+      closeBoth(1013, "backend websocket not ready")
+    } else {
+      pending.push(ev.data)
+    }
+  }
+  socket.onclose = ev => closeBoth(ev.code, ev.reason)
+  socket.onerror = () => closeBoth(1011, "client websocket error")
 
   return response
 }
@@ -78,4 +122,3 @@ export async function createReverseProxyHandler({ configPath }) {
     return handleHttp(req, backendHost, url)
   }
 }
-
