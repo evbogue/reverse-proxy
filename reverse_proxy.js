@@ -83,13 +83,17 @@ function handleWebSocket(req, backendHost, url) {
   return response
 }
 
-async function handleHttp(req, backendHost, url) {
+async function handleHttp(req, backendHost, url, clientIp) {
   const forwardURL = `http://${backendHost}${url.pathname}${url.search}`
 
   const headers = new Headers(req.headers)
   headers.set("x-forwarded-proto", "https")
   headers.set("x-forwarded-host", url.hostname)
   headers.set("x-forwarded-port", "443")
+  if (clientIp) {
+    headers.set("x-forwarded-for", clientIp)
+    headers.set("x-real-ip", clientIp)
+  }
 
   return fetch(forwardURL, {
     method: req.method,
@@ -101,7 +105,7 @@ async function handleHttp(req, backendHost, url) {
 export async function createReverseProxyHandler({ configPath }) {
   const domainMap = await loadDomainMap(configPath)
 
-  return async function (req) {
+  return async function (req, info) {
     const url = new URL(req.url)
     const hostname = url.hostname.toLowerCase()
 
@@ -111,6 +115,7 @@ export async function createReverseProxyHandler({ configPath }) {
     }
 
     const backendHost = `localhost:${backendPort}`
+    const clientIp = info?.remoteAddr?.hostname ?? ""
 
     const isWebSocket =
       req.headers.get("upgrade")?.toLowerCase() === "websocket"
@@ -119,6 +124,6 @@ export async function createReverseProxyHandler({ configPath }) {
       return handleWebSocket(req, backendHost, url)
     }
 
-    return handleHttp(req, backendHost, url)
+    return handleHttp(req, backendHost, url, clientIp)
   }
 }
