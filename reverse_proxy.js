@@ -28,6 +28,12 @@ function handleWebSocket(req, backendHost, url) {
   const backendUrl = `ws://${backendHost}${url.pathname}${url.search}`
   const backend = new WebSocket(backendUrl)
 
+  // sbot (ssb-ws) carries the shs handshake and box-stream as BINARY frames.
+  // Pin arraybuffer on both ends so bytes pass through intact and in order;
+  // the Deno default ("blob") can mangle/reorder the shs stream and break it.
+  socket.binaryType = "arraybuffer"
+  backend.binaryType = "arraybuffer"
+
   const pending = []
   let backendOpen = false
   let closed = false
