@@ -68,9 +68,29 @@ async function handleConn(client, upstreamAddr) {
 export async function startTcpForwarders({ configPath }) {
   const map = await loadTcpMap(configPath)
 
+  let started = 0
   for (const [listenPort, upstream] of map) {
     const upstreamAddr = parseUpstream(upstream)
-    const listener = Deno.listen({ port: listenPort })
+
+    let listener
+    try {
+      listener = Deno.listen({ port: listenPort })
+    } catch (err) {
+      // A busy/forbidden port must not take down the HTTPS server. The usual
+      // cause is the backend daemon already owning this port (then it does not
+      // need a forwarder at all) — log clearly and skip it.
+      if (err instanceof Deno.errors.AddrInUse) {
+        console.error(
+          `TCP passthrough :${listenPort} SKIPPED — port already in use. ` +
+            `If the daemon already binds :${listenPort} directly, remove it from tcp.json.`,
+        )
+      } else {
+        console.error(`TCP passthrough :${listenPort} SKIPPED — ${err.message}`)
+      }
+      continue
+    }
+
+    started++
     console.log(
       `TCP passthrough :${listenPort} -> ${upstreamAddr.hostname}:${upstreamAddr.port}`,
     )
@@ -82,5 +102,5 @@ export async function startTcpForwarders({ configPath }) {
     })()
   }
 
-  return map.size
+  return started
 }
