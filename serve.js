@@ -11,8 +11,8 @@ const handler = await createReverseProxyHandler({
 const tcpCount = await startTcpForwarders({ configPath: "./tcp.json" })
 if (tcpCount > 0) console.log(`Started ${tcpCount} raw TCP forwarder(s)`)
 
-const cert = await Deno.readTextFile("/etc/letsencrypt/live/anproto.com/fullchain.pem")
-const key  = await Deno.readTextFile("/etc/letsencrypt/live/anproto.com/privkey.pem")
+const cert = await Deno.readTextFile("/etc/letsencrypt/live/wiredove.net/fullchain.pem")
+const key  = await Deno.readTextFile("/etc/letsencrypt/live/wiredove.net/privkey.pem")
 
 console.log("Starting TLS reverse proxy on :443")
 
